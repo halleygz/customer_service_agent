@@ -1,0 +1,24 @@
+# Core dependencies for the terminal chatbot
+langchain>=0.1.0
+langchain-groq>=0.1.0
+langgraph>=0.1.0
+langchain-community>=0.1.0
+
+# LLM and Tool support
+groq>=0.4.0
+pydantic>=2.0.0
+
+# Database support
+psycopg2-binary>=2.9.0
+
+# Data generation (for seeding database)
+faker>=15.0.0
+
+# Environment and utilities
+python-dotenv>=1.0.0
+
+# Optional dependencies for enhanced functionality
+# Uncomment as needed
+# colorama>=0.4.6  # For colored terminal output
+# rich>=13.0.0     # For rich terminal formatting
+# click>=8.1.0     # For CLI utilities
