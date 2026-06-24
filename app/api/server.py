@@ -1,18 +1,20 @@
-from pathlib import Path
 from typing import Dict, Literal, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.services.database import (
+    get_active_escalation_by_ticket_id,
     get_customer_orders,
     get_customer_subscription,
     get_recent_conversation_history,
+    get_ticket_conversation_history,
     get_escalation_detail,
     list_escalations,
+    store_conversation_message,
+    store_human_message,
+    store_support_event,
     update_escalation_status,
 )
 from app.services.linear import LinearService
@@ -31,10 +33,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
-static_dir = frontend_dir / "static"
-app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
-
 SESSION_STATES: Dict[str, Dict] = {}
 
 
@@ -50,21 +48,53 @@ class EscalationUpdateRequest(BaseModel):
     assigned_admin: Optional[str] = None
 
 
-@app.get("/", response_class=HTMLResponse)
-def customer_page():
-    with open(frontend_dir / "templates" / "customer.html", "r", encoding="utf-8") as file:
-        return file.read()
+class HumanMessageRequest(BaseModel):
+    message: str = Field(min_length=1)
+    sender: str = "human_agent"
 
 
-@app.get("/admin", response_class=HTMLResponse)
-def admin_page():
-    with open(frontend_dir / "templates" / "admin.html", "r", encoding="utf-8") as file:
-        return file.read()
+@app.get("/api/health")
+def health_check():
+    return {"status": "ok", "service": "customer-support-api"}
 
 
 @app.post("/api/chat")
 def send_chat_message(payload: ChatRequest):
     conversation_id = payload.conversation_id or f"cust-{payload.customer_id}"
+
+    active_escalation = get_active_escalation_by_ticket_id(conversation_id)
+    if active_escalation:
+        store_conversation_message(
+            customer_id=payload.customer_id,
+            ticket_id=conversation_id,
+            role="customer",
+            content=payload.message,
+            metadata={
+                "escalation_id": active_escalation["id"],
+                "human_in_loop": True,
+            },
+        )
+        store_support_event(
+            customer_id=payload.customer_id,
+            ticket_id=conversation_id,
+            event_type="customer_message_to_human",
+            details={"escalation_id": active_escalation["id"]},
+        )
+        update_escalation_status(active_escalation["id"], status="in_progress")
+
+        return {
+            "conversation_id": conversation_id,
+            "customer_id": payload.customer_id,
+            "agent_response": (
+                "Your message has been added to the human support thread. "
+                "A support specialist can reply from the admin dashboard."
+            ),
+            "selected_route": active_escalation.get("route") or "escalation",
+            "assigned_agent": "human_support",
+            "status": "in_progress",
+            "handoff_note": "Conversation is currently handled by a human support agent.",
+            "escalation_id": active_escalation["id"],
+        }
 
     state = SESSION_STATES.get(conversation_id)
     if not state:
@@ -108,6 +138,11 @@ def customer_history(customer_id: int, limit: int = 25):
     return {"history": get_recent_conversation_history(customer_id, limit=limit)}
 
 
+@app.get("/api/conversations/{conversation_id}/messages")
+def conversation_messages(conversation_id: str):
+    return {"messages": get_ticket_conversation_history(conversation_id)}
+
+
 @app.get("/api/admin/escalations")
 def admin_list_escalations():
     return {"escalations": list_escalations()}
@@ -132,6 +167,18 @@ def admin_update_escalation(escalation_id: int, payload: EscalationUpdateRequest
     if not updated:
         raise HTTPException(status_code=404, detail="Escalation not found")
     return {"escalation": updated}
+
+
+@app.post("/api/admin/escalations/{escalation_id}/messages")
+def admin_send_human_message(escalation_id: int, payload: HumanMessageRequest):
+    message = store_human_message(
+        escalation_id=escalation_id,
+        message=payload.message,
+        sender=payload.sender,
+    )
+    if not message:
+        raise HTTPException(status_code=404, detail="Escalation not found")
+    return {"message": message}
 
 
 @app.get("/api/admin/linear/verify")

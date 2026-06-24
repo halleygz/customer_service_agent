@@ -376,6 +376,29 @@ def get_ticket_conversation_history(ticket_id: str) -> List[Dict[str, Any]]:
         conn.close()
 
 
+def get_active_escalation_by_ticket_id(ticket_id: str) -> Optional[Dict[str, Any]]:
+    conn = get_connection()
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT id, ticket_id, customer_id, route, summary, status,
+                       resolution_note, assigned_admin, linear_ticket_identifier,
+                       linear_ticket_url, created_at, updated_at
+                FROM escalations
+                WHERE ticket_id = %s
+                  AND status IN ('open', 'in_progress')
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (ticket_id,),
+            )
+            row = cur.fetchone()
+            return dict(row) if row else None
+    finally:
+        conn.close()
+
+
 def store_support_event(
     customer_id: int,
     ticket_id: str,
@@ -398,6 +421,37 @@ def store_support_event(
         return dict(row)
     finally:
         conn.close()
+
+
+def store_human_message(
+    escalation_id: int,
+    message: str,
+    sender: str = "human_agent",
+) -> Optional[Dict[str, Any]]:
+    detail = get_escalation_detail(escalation_id)
+    if not detail:
+        return None
+
+    message_row = store_conversation_message(
+        customer_id=detail["customer_id"],
+        ticket_id=detail["ticket_id"],
+        role=sender,
+        content=message,
+        metadata={"escalation_id": escalation_id, "human_in_loop": True},
+    )
+    store_support_event(
+        customer_id=detail["customer_id"],
+        ticket_id=detail["ticket_id"],
+        event_type="human_message",
+        details={"escalation_id": escalation_id, "sender": sender, "message_id": message_row["id"]},
+    )
+    update_escalation_status(
+        escalation_id=escalation_id,
+        status="in_progress",
+        assigned_admin=sender,
+    )
+    logger.info("human_message_stored escalation_id=%s sender=%s", escalation_id, sender)
+    return message_row
 
 
 def create_escalation(

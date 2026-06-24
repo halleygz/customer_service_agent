@@ -1,6 +1,6 @@
 # Customer Service Agent (LangGraph + Groq)
 
-Phase 2 adds a web app, admin escalation dashboard, improved handoffs, escalation persistence, and runtime observability.
+Phase 2 adds a Next.js web app, admin escalation dashboard, improved handoffs, escalation persistence, human-in-the-loop chat, and runtime observability.
 
 ## Run
 
@@ -16,16 +16,25 @@ Run terminal experience:
 python run.py
 ```
 
-Run web app + admin dashboard:
+Run backend API:
 
 ```bash
 python run_web.py
 ```
 
+Run Next.js frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
 Open:
 
-- Customer UI: http://localhost:8000/
-- Admin UI: http://localhost:8000/admin
+- Customer UI: http://localhost:3000/
+- Admin UI: http://localhost:3000/admin
+- Backend API: http://localhost:8000/api/health
 
 ## Required Environment
 
@@ -42,6 +51,7 @@ Open:
 Customer:
 
 - `POST /api/chat`
+- `GET /api/conversations/{conversation_id}/messages`
 - `GET /api/customer/{customer_id}/orders`
 - `GET /api/customer/{customer_id}/subscription`
 - `GET /api/customer/{customer_id}/history`
@@ -51,6 +61,7 @@ Admin:
 - `GET /api/admin/escalations`
 - `GET /api/admin/escalations/{escalation_id}`
 - `PATCH /api/admin/escalations/{escalation_id}`
+- `POST /api/admin/escalations/{escalation_id}/messages`
 - `GET /api/admin/linear/verify`
 
 
@@ -61,7 +72,8 @@ High level components:
 - `app/agents` — Agent implementations (supervisor triage, specialists, escalation agent).
 - `app/tools` — Tool adapters that call services for DB mutations and Linear ticket creation.
 - `app/services` — DB access, Linear API integration, LLM wrapper, orchestrator, and logging.
-- `app/api` + `app/frontend` — Thin FastAPI layer plus minimal customer/admin HTML UI.
+- `app/api` — Thin FastAPI API layer.
+- `frontend` — Standalone Next.js customer portal and admin dashboard.
 
 Design goals: centralize LLM usage (`app/services/llm.py`), separate tool adapters and service logic, persist conversation and escalation data, and enable agent-to-agent handoffs before human escalation.
 
@@ -159,10 +171,24 @@ Terminal prototype:
 python run.py
 ```
 
-Run web UI (FastAPI + Uvicorn):
+Run backend API (FastAPI + Uvicorn):
 ```bash
 python run_web.py
-# Open http://localhost:8000/ for customer UI and http://localhost:8000/admin for admin UI
+```
+
+Run frontend UI (Next.js):
+```bash
+cd frontend
+npm install
+npm run dev
+# Open http://localhost:3000/ and http://localhost:3000/admin
+```
+
+Configure a non-default backend URL for the Next app:
+```bash
+cd frontend
+cp .env.example .env.local
+# edit NEXT_PUBLIC_API_BASE_URL if your API is not on http://localhost:8000
 ```
 
 
