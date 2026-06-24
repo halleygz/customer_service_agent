@@ -1,12 +1,6 @@
-import sys
-from pathlib import Path
 import uuid
 
-# Add the app directory to the Python path
-app_dir = Path(__file__).parent
-sys.path.insert(0, str(app_dir))
-
-from graph.builder import graph
+from app.graph.builder import graph
 
 
 def print_welcome():
@@ -47,10 +41,14 @@ def create_initial_state(customer_id):
         "customer_msg": "",
         "customer_context": None,
         "agent_response": None,
-        "category": None,
+        "classification": None,
+        "selected_route": None,
         "assigned_agent": None,
+        "tool_results": [],
+        "requires_human": False,
         "status": "open",
         "escalation_reason": None,
+        "support_summary": None,
         "conversation_history": []
     }
 

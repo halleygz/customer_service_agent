@@ -1,27 +1,42 @@
-from app.prompts.feature_request import FEATURE_REQUEST_PROMPT
-from app.services import llm
-from app.utils.format_history import format_conversation_history
+from app.tools.req_feature import request_feature
 
 
 def feature_request_agent(state):
-    conv_history = format_conversation_history(state.get("conversation_history", []))
+    customer = (state.get("customer_context") or {}).get("customer") or {}
+    customer_tier = customer.get("subscription_plan", "Unknown")
+    message = state.get("customer_msg", "")
 
-    prompt = FEATURE_REQUEST_PROMPT.format(
-        customer_context = state["customer_context"],
-        customer_msg = state["customer_msg"],
-        conversation_history=conv_history
+    result = request_feature(
+        customer_id=state["customer_id"],
+        customer_tier=customer_tier,
+        summary=message[:120],
+        details=message,
     )
 
-    response = llm.invoke(prompt)
+    tool_results = list(state.get("tool_results", []))
+    tool_results.append(result)
 
-    # use the req feature tool to request the feature.
-
-    updated_history = state.get("conversation_history", []).copy()
-    updated_history.append({"role": "customer", "content": state["customer_msg"]})
-    updated_history.append({"role": "agent", "content": response.content})
+    if result.get("success"):
+        ticket = result.get("ticket", {})
+        ticket_ref = ticket.get("identifier", ticket.get("id", "N/A"))
+        return {
+            "assigned_agent": "feature_request",
+            "tool_results": tool_results,
+            "agent_response": (
+                "Thanks for the suggestion. "
+                f"I created a feature request ticket ({ticket_ref})."
+            ),
+            "status": "resolved",
+        }
 
     return {
-        "agent_response": response.content,
-        "conversation_history": updated_history,
-        "status": "resolved"
+        "assigned_agent": "feature_request",
+        "tool_results": tool_results,
+        "agent_response": (
+            "I captured your feature request, but ticket creation failed. "
+            "I will escalate this to a human agent."
+        ),
+        "requires_human": True,
+        "escalation_reason": "Failed to create feature request ticket.",
+        "status": "needs_human",
     }

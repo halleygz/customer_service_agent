@@ -1,46 +1,22 @@
-from services.database import get_connection
+from app.services.database import get_customer_context as _get_customer_context
 
 
 def get_customer_context(customer_id: int):
-
-    conn = get_connection()
-
-    cur = conn.cursor()
-
-    cur.execute(
-        """
-        SELECT
-            full_name,
-            email,
-            subscription_plan,
-            account_status
-        FROM customers
-        WHERE id = %s
-        """,
-        (customer_id,)
-    )
-
-    customer = cur.fetchone()
-
-    cur.execute(
-        """
-        SELECT
-            product_name,
-            order_status,
-            total
-        FROM orders
-        WHERE customer_id = %s
-        """,
-        (customer_id,)
-    )
-
-    orders = cur.fetchall()
-
-    conn.close()
+    context = _get_customer_context(customer_id)
+    customer = context.get("customer")
+    if not customer:
+        return {
+            "success": False,
+            "message": f"Customer {customer_id} was not found.",
+            "customer": None,
+            "orders": [],
+        }
 
     return {
+        "success": True,
+        "message": "Customer context loaded.",
         "customer": customer,
-        "orders": orders
+        "orders": context.get("orders", []),
     }
 
 

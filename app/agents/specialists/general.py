@@ -1,30 +1,26 @@
+from app.services.llm import llm_service
 from app.utils.format_history import format_conversation_history
-from services.llm import llm
 
-from prompts.general import (
-    GENERAL_SUPPORT_PROMPT
-)
+
+GENERAL_SYSTEM_PROMPT = """
+You are a professional customer support assistant.
+Answer clearly and concisely for general questions.
+If unsure, provide the best safe guidance and suggest escalation.
+""".strip()
 
 
 def general_support_agent(state):
-    """Process customer message and generate response."""
-    conversation_history_str = format_conversation_history(state.get("conversation_history", []))
-    
-    prompt = GENERAL_SUPPORT_PROMPT.format(
-        customer_context=state["customer_context"],
-        customer_msg=state["customer_msg"],
-        conversation_history=conversation_history_str
+    history_text = format_conversation_history(state.get("conversation_history", []))
+    user_prompt = (
+        f"Customer context:\n{state.get('customer_context')}\n\n"
+        f"Conversation history:\n{history_text}\n\n"
+        f"Current message:\n{state.get('customer_msg', '')}"
     )
-
-    response = llm.invoke(prompt)
-    
-    # Update conversation history
-    updated_history = state.get("conversation_history", []).copy()
-    updated_history.append({"role": "customer", "content": state["customer_msg"]})
-    updated_history.append({"role": "agent", "content": response.content})
+    response = llm_service.invoke_text(GENERAL_SYSTEM_PROMPT, user_prompt)
 
     return {
-        "agent_response": response.content,
-        "conversation_history": updated_history,
-        "status": "resolved"
+        "assigned_agent": "general_inquiry",
+        "agent_response": response,
+        "tool_results": state.get("tool_results", []),
+        "status": "resolved",
     }

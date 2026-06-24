@@ -5,18 +5,13 @@ Properly sets up the Python path and runs the interactive support agent.
 """
 
 import sys
-import os
 from pathlib import Path
 
-# Add the app directory to the Python path
+# Add project root to the Python path
 project_root = Path(__file__).parent
-app_dir = project_root / "app"
-sys.path.insert(0, str(app_dir))
-
-# Change to app directory
-os.chdir(str(app_dir))
+sys.path.insert(0, str(project_root))
 
 # Import and execute main
 if __name__ == "__main__":
-    from main import run_conversation
+    from app.main import run_conversation
     run_conversation()

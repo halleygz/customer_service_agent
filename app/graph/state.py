@@ -1,15 +1,43 @@
-from typing import Optional, TypedDict, List, Any
+from typing import Any, Dict, List, Literal, Optional, TypedDict
 
 
-class CustomerState(TypedDict):
+Route = Literal[
+    "billing",
+    "technical_support",
+    "feature_request",
+    "general_inquiry",
+    "escalation",
+]
+
+
+class RoutingDecision(TypedDict, total=False):
+    route: Route
+    reason: str
+    confidence: float
+    requires_human: bool
+
+
+class ToolResult(TypedDict, total=False):
+    tool_name: str
+    success: bool
+    action: str
+    message: str
+    data: Dict[str, Any]
+
+
+class CustomerState(TypedDict, total=False):
     ticket_id: str
-    customer_id: str
+    customer_id: int
     customer_msg: str
-    category: Optional[str]
+    customer_context: Optional[Dict[str, Any]]
+    conversation_history: List[Dict[str, Any]]
+    classification: Optional[RoutingDecision]
+    selected_route: Optional[Route]
     assigned_agent: Optional[str]
+    tool_results: List[ToolResult]
+    requires_human: bool
+    escalation_reason: Optional[str]
+    support_summary: Optional[str]
     status: str
-    escalation_reason: str
-    conversation_history: List[dict]
-    customer_context: Optional[Any]
     agent_response: Optional[str]
 
