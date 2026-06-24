@@ -1,3 +1,10 @@
+from app.services.database import create_escalation
+from app.services.logger import get_logger
+
+
+logger = get_logger("escalation")
+
+
 def escalation_agent(state):
 	context = state.get("customer_context") or {}
 	customer = context.get("customer") or {}
@@ -14,6 +21,8 @@ def escalation_agent(state):
 					"url": ticket.get("url"),
 				}
 			)
+
+	primary_ticket = ticket_notes[0] if ticket_notes else {}
 
 	summary = {
 		"customer_id": state.get("customer_id"),
@@ -36,8 +45,24 @@ def escalation_agent(state):
 		"unresolved_blocker": state.get("escalation_reason") or "Customer requested human support.",
 	}
 
+	escalation_row = create_escalation(
+		customer_id=state.get("customer_id"),
+		ticket_id=state.get("ticket_id"),
+		route=state.get("selected_route"),
+		summary=str(summary),
+		linear_ticket_identifier=primary_ticket.get("identifier"),
+		linear_ticket_url=primary_ticket.get("url"),
+	)
+	logger.info(
+		"escalation_handoff escalation_id=%s customer_id=%s route=%s",
+		escalation_row.get("id"),
+		state.get("customer_id"),
+		state.get("selected_route"),
+	)
+
 	return {
 		"assigned_agent": "escalation",
+		"escalation_id": escalation_row.get("id"),
 		"status": "escalated",
 		"requires_human": True,
 		"support_summary": str(summary),

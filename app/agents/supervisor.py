@@ -2,7 +2,11 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.services.logger import get_logger
 from app.services.llm import llm_service
+
+
+logger = get_logger("supervisor")
 
 
 class RoutingDecisionModel(BaseModel):
@@ -44,16 +48,43 @@ def classify_request(state):
 		user_prompt=customer_msg,
 	)
 
-	requires_human = bool(result.requires_human or result.confidence < 0.55)
-	selected_route = "escalation" if requires_human else result.route
+	message_lower = customer_msg.lower()
+	explicit_human_request = any(token in message_lower for token in ["human", "representative", "live agent"]) and any(
+		token in message_lower for token in ["talk", "speak", "connect", "escalate"]
+	)
+
+	selected_route = result.route
+	requires_human = bool(result.requires_human and explicit_human_request)
+	if explicit_human_request:
+		selected_route = "escalation"
+		requires_human = True
+	elif result.confidence < 0.55:
+		# Low confidence defaults to general inquiry first to allow AI handoff before human escalation.
+		selected_route = "general_inquiry"
+		requires_human = False
+
+	previous_route = state.get("selected_route")
+	handoff_note = None
+	if previous_route and previous_route != selected_route:
+		handoff_note = f"Handoff from {previous_route} to {selected_route}"
+
+	logger.info(
+		"classifier_decision route=%s confidence=%.2f requires_human=%s reason=%s",
+		selected_route,
+		result.confidence,
+		requires_human,
+		result.reason,
+	)
 
 	return {
 		"classification": result.model_dump(),
 		"selected_route": selected_route,
+		"previous_route": previous_route,
+		"handoff_note": handoff_note,
 		"requires_human": requires_human,
 		"escalation_reason": (
 			result.reason
 			if selected_route == "escalation"
-			else state.get("escalation_reason")
+			else None
 		),
 	}

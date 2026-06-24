@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin Escalation Dashboard</title>
+  <link rel="stylesheet" href="/static/app.css" />
+</head>
+<body>
+  <header>
+    <h1>Admin Escalation Dashboard</h1>
+    <small>Review escalated issues, inspect context, and resolve cases.</small>
+  </header>
+
+  <div class="container grid-2">
+    <section class="card">
+      <h2>Escalated Issues</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Customer</th>
+            <th>Route</th>
+            <th>Status</th>
+            <th>Created</th>
+            <th>Linear</th>
+          </tr>
+        </thead>
+        <tbody id="escalationsBody"></tbody>
+      </table>
+      <p class="muted" id="linearStatus"></p>
+      <button class="secondary" onclick="verifyLinear()">Verify Linear</button>
+    </section>
+
+    <section class="card">
+      <h2>Issue Detail</h2>
+      <div id="detailPanel" class="muted">Select an escalation to view details.</div>
+      <div style="margin-top: 1rem;">
+        <h3>Update Status</h3>
+        <div class="row">
+          <select id="statusInput">
+            <option value="open">open</option>
+            <option value="in_progress">in_progress</option>
+            <option value="resolved">resolved</option>
+          </select>
+          <input id="adminInput" placeholder="Assigned admin (optional)" />
+        </div>
+        <textarea id="noteInput" rows="3" placeholder="Resolution note (optional)"></textarea>
+        <button class="success" onclick="updateEscalation()">Update Escalation</button>
+      </div>
+    </section>
+  </div>
+
+<script>
+let selectedEscalationId = null;
+
+async function loadEscalations() {
+  const res = await fetch('/api/admin/escalations');
+  const data = await res.json();
+  const body = document.getElementById('escalationsBody');
+  body.innerHTML = '';
+
+  (data.escalations || []).forEach(item => {
+    const tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
+    tr.onclick = () => loadDetail(item.id);
+    tr.innerHTML = `
+      <td>${item.id}</td>
+      <td>${item.customer_id} ${item.full_name ? `(${item.full_name})` : ''}</td>
+      <td>${item.route || 'n/a'}</td>
+      <td><span class='badge'>${item.status}</span></td>
+      <td>${new Date(item.created_at).toLocaleString()}</td>
+      <td>${item.linear_ticket_identifier || '-'}</td>
+    `;
+    body.appendChild(tr);
+  });
+}
+
+async function loadDetail(escalationId) {
+  selectedEscalationId = escalationId;
+  const res = await fetch(`/api/admin/escalations/${escalationId}`);
+  const data = await res.json();
+  const detail = data.escalation;
+
+  const conversation = (detail.conversation || [])
+    .map(msg => `<p><strong>${msg.message_role}</strong>: ${msg.message_content}</p>`)
+    .join('');
+
+  const events = (detail.events || [])
+    .map(evt => `<p><strong>${evt.event_type}</strong>: ${JSON.stringify(evt.details)}</p>`)
+    .join('');
+
+  document.getElementById('detailPanel').innerHTML = `
+    <p><strong>Escalation:</strong> ${detail.id}</p>
+    <p><strong>Ticket:</strong> ${detail.ticket_id}</p>
+    <p><strong>Customer:</strong> ${detail.customer_id} ${detail.full_name || ''}</p>
+    <p><strong>Status:</strong> ${detail.status}</p>
+    <p><strong>Route:</strong> ${detail.route || 'n/a'}</p>
+    <p><strong>Linear:</strong> ${detail.linear_ticket_identifier || '-'} ${detail.linear_ticket_url || ''}</p>
+    <h3>Summary</h3>
+    <p>${detail.summary}</p>
+    <h3>Conversation</h3>
+    ${conversation || '<p>No conversation messages found.</p>'}
+    <h3>Actions Attempted</h3>
+    ${events || '<p>No support events found.</p>'}
+  `;
+
+  document.getElementById('statusInput').value = detail.status;
+}
+
+async function updateEscalation() {
+  if (!selectedEscalationId) return;
+
+  const payload = {
+    status: document.getElementById('statusInput').value,
+    resolution_note: document.getElementById('noteInput').value || null,
+    assigned_admin: document.getElementById('adminInput').value || null,
+  };
+
+  await fetch(`/api/admin/escalations/${selectedEscalationId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  await loadEscalations();
+  await loadDetail(selectedEscalationId);
+}
+
+async function verifyLinear() {
+  const res = await fetch('/api/admin/linear/verify');
+  const data = await res.json();
+  document.getElementById('linearStatus').textContent = data.success
+    ? `Linear verified for ${data.viewer?.email || 'viewer'}`
+    : `Linear verification failed: ${data.message || 'unknown error'}`;
+}
+
+window.addEventListener('DOMContentLoaded', async () => {
+  await loadEscalations();
+  await verifyLinear();
+});
+</script>
+</body>
+</html>

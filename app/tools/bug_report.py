@@ -1,4 +1,8 @@
 from app.services.linear import LinearService
+from app.services.logger import get_logger
+
+
+logger = get_logger("tool.bug_report")
 
 
 def bug_report(
@@ -7,6 +11,7 @@ def bug_report(
 	summary: str,
 	reproduction_steps: str,
 ):
+	logger.info("tool_invocation bug_report customer_id=%s", customer_id)
 	linear_service = LinearService()
 	result = linear_service.createBugReportTicket(
 		customer_id=customer_id,
@@ -16,6 +21,7 @@ def bug_report(
 	)
 
 	if not result.get("success"):
+		logger.error("tool_result bug_report success=false errors=%s", result.get("errors"))
 		return {
 			"success": False,
 			"tool_name": "bug_report",
@@ -24,6 +30,7 @@ def bug_report(
 			"errors": result.get("errors", []),
 		}
 
+	logger.info("tool_result bug_report success=true ticket=%s", result.get("ticket", {}).get("identifier"))
 	return {
 		"success": True,
 		"tool_name": "bug_report",

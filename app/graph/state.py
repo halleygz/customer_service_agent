@@ -27,16 +27,20 @@ class ToolResult(TypedDict, total=False):
 
 class CustomerState(TypedDict, total=False):
     ticket_id: str
+    conversation_id: str
     customer_id: int
     customer_msg: str
     customer_context: Optional[Dict[str, Any]]
     conversation_history: List[Dict[str, Any]]
     classification: Optional[RoutingDecision]
     selected_route: Optional[Route]
+    previous_route: Optional[Route]
+    handoff_note: Optional[str]
     assigned_agent: Optional[str]
     tool_results: List[ToolResult]
     requires_human: bool
     escalation_reason: Optional[str]
+    escalation_id: Optional[int]
     support_summary: Optional[str]
     status: str
     agent_response: Optional[str]

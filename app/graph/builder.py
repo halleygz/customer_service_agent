@@ -19,14 +19,25 @@ from app.agents.specialists.general import (
     general_support_agent
 )
 from app.agents.supervisor import classify_request
+from app.services.logger import get_logger
+
+
+logger = get_logger("graph")
 
 
 def route_after_classification(state: CustomerState):
+    logger.info(
+        "route_selected route=%s previous=%s handoff=%s",
+        state.get("selected_route"),
+        state.get("previous_route"),
+        state.get("handoff_note"),
+    )
     return state.get("selected_route", "general_inquiry")
 
 
 def route_after_specialist(state: CustomerState):
     if state.get("requires_human"):
+        logger.info("specialist_requested_escalation assigned_agent=%s", state.get("assigned_agent"))
         return "escalation"
     return "persist_interaction"
 
@@ -34,15 +45,23 @@ def route_after_specialist(state: CustomerState):
 def persist_interaction(state: CustomerState):
     customer_id = state["customer_id"]
     ticket_id = state["ticket_id"]
+    conversation_id = state.get("conversation_id") or ticket_id
 
     customer_msg = state.get("customer_msg", "")
     agent_response = state.get("agent_response", "")
 
     try:
+        logger.info(
+            "persist_interaction customer_id=%s ticket_id=%s route=%s status=%s",
+            customer_id,
+            ticket_id,
+            state.get("selected_route"),
+            state.get("status"),
+        )
         if customer_msg:
             store_conversation_message(
                 customer_id=customer_id,
-                ticket_id=ticket_id,
+                ticket_id=conversation_id,
                 role="customer",
                 content=customer_msg,
                 metadata={"route": state.get("selected_route")},
@@ -51,7 +70,7 @@ def persist_interaction(state: CustomerState):
         if agent_response:
             store_conversation_message(
                 customer_id=customer_id,
-                ticket_id=ticket_id,
+                ticket_id=conversation_id,
                 role="agent",
                 content=agent_response,
                 metadata={"status": state.get("status")},
@@ -61,7 +80,7 @@ def persist_interaction(state: CustomerState):
         if classification:
             store_support_event(
                 customer_id=customer_id,
-                ticket_id=ticket_id,
+                ticket_id=conversation_id,
                 event_type="classification",
                 details=classification,
             )
@@ -70,7 +89,7 @@ def persist_interaction(state: CustomerState):
             if isinstance(result, dict):
                 store_support_event(
                     customer_id=customer_id,
-                    ticket_id=ticket_id,
+                    ticket_id=conversation_id,
                     event_type="tool_action",
                     details=result,
                 )
@@ -78,17 +97,19 @@ def persist_interaction(state: CustomerState):
         if state.get("status") == "escalated":
             store_support_event(
                 customer_id=customer_id,
-                ticket_id=ticket_id,
+                ticket_id=conversation_id,
                 event_type="escalation",
                 details={
                     "reason": state.get("escalation_reason"),
                     "summary": state.get("support_summary"),
+                    "escalation_id": state.get("escalation_id"),
                 },
             )
     except Exception as exc:
-        print(f"Warning: failed to persist interaction: {exc}")
+        logger.exception("persist_interaction_failed error=%s", exc)
 
     return {
+        "conversation_id": conversation_id,
         "status": state.get("status", "resolved"),
     }
 

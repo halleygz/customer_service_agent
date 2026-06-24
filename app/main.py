@@ -1,6 +1,4 @@
-import uuid
-
-from app.graph.builder import graph
+from app.services.orchestrator import create_initial_state, run_customer_turn
 
 
 def print_welcome():
@@ -33,26 +31,6 @@ def should_exit(user_input):
     return user_input.lower() in ["exit", "quit", "bye"]
 
 
-def create_initial_state(customer_id):
-    """Create the initial state for the conversation."""
-    return {
-        "ticket_id": str(uuid.uuid4())[:8],
-        "customer_id": customer_id,
-        "customer_msg": "",
-        "customer_context": None,
-        "agent_response": None,
-        "classification": None,
-        "selected_route": None,
-        "assigned_agent": None,
-        "tool_results": [],
-        "requires_human": False,
-        "status": "open",
-        "escalation_reason": None,
-        "support_summary": None,
-        "conversation_history": []
-    }
-
-
 def run_conversation():
     """Run the conversational loop."""
     print_welcome()
@@ -82,12 +60,10 @@ def run_conversation():
             continue
         
         # Update state with current message
-        state["customer_msg"] = user_message
-        
         # Run graph
         print("\n🤖 Agent: ", end="", flush=True)
         try:
-            result = graph.invoke(state)
+            result = run_customer_turn(state, user_message)
             
             # Print agent response
             print(result.get("agent_response", "(No response)"))
