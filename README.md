@@ -1,7 +1,5 @@
 # Customer Service Agent
 
-Phase 2 adds a Next.js web app, admin escalation dashboard, improved handoffs, escalation persistence, human-in-the-loop chat, and runtime observability.
-
 ## Run
 
 Install dependencies:
